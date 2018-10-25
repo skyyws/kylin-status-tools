@@ -1,0 +1,81 @@
+from __future__ import division
+import urllib  
+import urllib2
+import json
+import base64
+import sys
+
+URL_PREFIX = 'http://%s/kylin/api/'
+HOSTNAME='localhost:7070'
+USERNAME='ADMIN'
+PASSWORD='KYLIN'
+KB = 1024
+MB = 1024 * KB
+GB = 1024 * MB
+GAP = 30
+
+def get_http(sub_url):
+  url = URL_PREFIX % HOSTNAME + sub_url
+  req = urllib2.Request(url)
+  auth_key = base64.b64encode(USERNAME + ':' + PASSWORD)
+  req.add_header('Authorization','Basic ' + auth_key)
+  req.add_header('Content-Type','application/json')
+  resp = urllib2.urlopen(req)
+  return resp.read() 
+
+def get_projects():
+  result = get_http('projects')
+  projects = json.loads(result)
+  pdict = {}
+  for project in projects:
+    realizations = project['realizations']
+    project_size = 0
+    for realization in realizations:
+      if realization['type'] == 'CUBE':
+        cube_size = get_cube_size(realization['realization'])
+        project_size += cube_size
+    pdict[project['name']] = project_size
+
+  pdict = sorted(pdict.items(),key = lambda x:x[1],reverse = True)
+  dict_pretty_print(pdict)
+
+def get_cube_size(cube_name):
+  result = get_http('cubes/' + cube_name)
+  cube = json.loads(result)
+  segments = cube['segments']
+  size = 0
+  for segment in segments:
+    size += segment['size_kb']
+  return size
+
+def dict_pretty_print(project_dict):
+  for item in project_dict:
+    space_gap = ''
+    if len(item[0]) < GAP:
+      num_space = GAP - len(item[0])
+      space_gap = ' ' * num_space
+    print item[0] + space_gap + size_pretty_print(item[1])
+
+def size_pretty_print(size_kb):
+  if size_kb < KB:
+    return bytes(size_kb) + ' KB'
+  elif size_kb >= KB and size_kb < MB:
+    return get_size_str(size_kb, KB) + ' MB'
+  elif size_kb >= MB and size_kb < GB:
+    return get_size_str(size_kb, MB) + ' GB'
+  else:
+    return get_size_str(size_kb, GB) + ' TB'
+
+def get_size_str(size, unit):
+  size_num = round(size / unit, 2)
+  return bytes(size_num)
+
+if __name__ == '__main__':
+  if len(sys.argv) != 4:
+    print 'HOSTNAME USERNAME PASSWORD are necessary!'
+    sys.exit(1)
+
+  HOSTNAME = sys.argv[1]
+  USERNAME = sys.argv[2]
+  PASSWORD = sys.argv[3]
+  get_projects()
